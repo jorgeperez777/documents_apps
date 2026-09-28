@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Infraestructura y entrega continua en Google Cloud</title>
+<meta name="description" content="Tres productos en Cloud Run: pipelines de Cloud Build, migraciones fuera del despliegue, secretos, observabilidad y un entorno de staging levantado desde cero.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* ---------------------------------------------------------------------------
+   Documento de portafolio. Se lee en pantalla y se imprime a PDF, así que el
+   fondo es claro en los dos casos y la hoja de impresión es parte del diseño,
+   no un añadido: lo que se manda con un CV se imprime.
+--------------------------------------------------------------------------- */
+:root {
+  --paper:      #FBFAF8;
+  --surface:    #F1EEE8;
+  --ink:        #17212B;
+  --ink-soft:   #46525E;
+  --ink-faint:  #77828C;
+  --rule:       rgba(23, 33, 43, 0.13);
+  --rule-hard:  rgba(23, 33, 43, 0.32);
+  --accent:     #A8481B;
+  --accent-dim: #C9702F;
+  --ok:         #2C6249;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper:      #12171C;
+    --surface:    #1B222A;
+    --ink:        #ECE8E1;
+    --ink-soft:   #B3BCC4;
+    --ink-faint:  #7C8791;
+    --rule:       rgba(236, 232, 225, 0.16);
+    --rule-hard:  rgba(236, 232, 225, 0.34);
+    --accent:     #E08A4E;
+    --accent-dim: #C9702F;
+    --ok:         #6FB392;
+  }
+}
+:root[data-theme="dark"] {
+  --paper:      #12171C;
+  --surface:    #1B222A;
+  --ink:        #ECE8E1;
+  --ink-soft:   #B3BCC4;
+  --ink-faint:  #7C8791;
+  --rule:       rgba(236, 232, 225, 0.16);
+  --rule-hard:  rgba(236, 232, 225, 0.34);
+  --accent:     #E08A4E;
+  --accent-dim: #C9702F;
+  --ok:         #6FB392;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 15.5px;
+  line-height: 1.62;
+  -webkit-font-smoothing: antialiased;
+}
+
+.page { max-width: 940px; margin: 0 auto; padding: 56px 32px 96px; }
+
+h1, h2, h3, .eyebrow, .num {
+  font-family: 'IBM Plex Sans Condensed', 'IBM Plex Sans', sans-serif;
+}
+h1, h2, h3 { text-wrap: balance; }
+
+.eyebrow {
+  font-size: 11.5px; font-weight: 600; letter-spacing: 0.15em;
+  text-transform: uppercase; color: var(--ink-faint); margin: 0 0 10px;
+}
+
+h1 {
+  font-size: clamp(34px, 6vw, 50px); font-weight: 700; line-height: 1.04;
+  letter-spacing: -0.005em; margin: 0 0 16px; text-transform: uppercase;
+}
+.lede { font-size: 18px; color: var(--ink-soft); max-width: 62ch; margin: 0 0 26px; }
+
+h2 {
+  font-size: 25px; font-weight: 600; letter-spacing: 0.01em;
+  text-transform: uppercase; margin: 0 0 6px;
+}
+h3 { font-size: 15.5px; font-weight: 600; letter-spacing: 0.04em; margin: 0 0 6px; }
+
+p { max-width: 70ch; margin: 0 0 14px; }
+.sub { color: var(--ink-faint); font-size: 14.5px; max-width: 68ch; margin: 0 0 22px; }
+strong { font-weight: 600; }
+
+code, .mono, .num, th, .tag {
+  font-family: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+}
+code {
+  font-size: 0.86em; background: var(--surface); padding: 1px 5px;
+  border-radius: 2px; color: var(--ink);
+}
+
+/* --- Cabecera ------------------------------------------------------------- */
+header.masthead { border-bottom: 3px solid var(--ink); padding-bottom: 26px; margin-bottom: 8px; }
+.byline {
+  display: flex; flex-wrap: wrap; gap: 8px 22px; align-items: baseline;
+  font-family: 'IBM Plex Mono', monospace; font-size: 12.5px;
+  color: var(--ink-faint); margin-top: 6px;
+}
+.byline b { color: var(--ink); font-weight: 500; }
+
+/* --- Cifras --------------------------------------------------------------- */
+.figures {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 0; margin: 34px 0 8px; border-top: 1px solid var(--rule);
+}
+.fig { padding: 16px 18px 16px 0; border-bottom: 1px solid var(--rule); }
+.fig .n {
+  font-family: 'IBM Plex Mono', monospace; font-size: 30px; font-weight: 500;
+  line-height: 1; color: var(--accent); font-variant-numeric: tabular-nums;
+}
+.fig .l {
+  display: block; margin-top: 7px; font-size: 12.5px; color: var(--ink-faint);
+  line-height: 1.4;
+}
+
+/* --- Secciones ------------------------------------------------------------ */
+section { margin-top: 52px; }
+.sec-head {
+  display: grid; grid-template-columns: 58px minmax(0, 1fr); gap: 18px;
+  align-items: start; border-top: 2px solid var(--accent);
+  padding-top: 14px; margin-bottom: 20px;
+}
+.sec-head .num {
+  font-size: 12px; font-weight: 600; letter-spacing: 0.1em; color: var(--accent);
+  padding-top: 7px;
+}
+.sec-body { display: grid; grid-template-columns: 58px minmax(0, 1fr); gap: 18px; }
+.sec-body > :first-child { grid-column: 2; }
+.sec-body > * { grid-column: 2; }
+
+@media (max-width: 720px) {
+  .page { padding: 36px 20px 64px; }
+  .sec-head, .sec-body { grid-template-columns: 1fr; gap: 6px; }
+  .sec-head .num { padding-top: 0; }
+  .sec-body > * { grid-column: 1; }
+}
+
+/* --- Productos ------------------------------------------------------------ */
+.products { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; margin-bottom: 20px; }
+.product { background: var(--paper); border: 1px solid var(--rule); padding: 20px 20px 22px; }
+.product h3 { margin-bottom: 2px; }
+.product .tag {
+  display: inline-block; font-size: 10.5px; letter-spacing: 0.06em;
+  color: var(--accent); margin-bottom: 10px;
+}
+.product p { font-size: 14px; color: var(--ink-soft); margin: 0 0 10px; }
+.product ul { margin: 0; padding-left: 16px; font-size: 13.5px; color: var(--ink-soft); }
+.product li { margin-bottom: 3px; }
+
+/* --- Pasos numerados (el orden ES información: es un pipeline) ------------- */
+.steps { list-style: none; margin: 0 0 20px; padding: 0; counter-reset: step; }
+.steps > li {
+  display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 14px;
+  padding: 14px 0; border-top: 1px solid var(--rule);
+}
+.steps > li:last-child { border-bottom: 1px solid var(--rule); }
+.steps .n {
+  counter-increment: step; font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px; font-weight: 600; color: var(--paper); background: var(--ink);
+  height: 20px; display: flex; align-items: center; justify-content: center;
+  margin-top: 2px;
+}
+.steps .n::before { content: counter(step); }
+.steps li.key .n { background: var(--accent); }
+.steps p { margin: 0; font-size: 14.5px; color: var(--ink-soft); }
+.steps h3 { margin-bottom: 3px; }
+
+/* --- Tablas --------------------------------------------------------------- */
+.tablewrap { overflow-x: auto; margin: 0 0 20px; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 460px; }
+th, td { text-align: left; padding: 9px 16px 9px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th {
+  font-size: 10.5px; font-weight: 600; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--ink-faint);
+  border-bottom: 1px solid var(--rule-hard);
+}
+td:first-child { color: var(--ink); font-weight: 500; }
+td.mono { font-family: 'IBM Plex Mono', monospace; font-size: 13px; }
+
+/* --- Recuadro ------------------------------------------------------------- */
+.note {
+  background: var(--surface); border-left: 3px solid var(--accent);
+  padding: 16px 20px; margin: 0 0 20px;
+}
+.note p { margin: 0; font-size: 14.5px; color: var(--ink-soft); }
+.note p + p { margin-top: 9px; }
+.note strong { color: var(--ink); }
+.note .eyebrow { margin-bottom: 7px; }
+
+/* --- Stack ---------------------------------------------------------------- */
+.stack { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 22px 32px; }
+.stack h3 { color: var(--accent); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px; }
+.stack ul { margin: 0; padding-left: 15px; font-size: 14px; color: var(--ink-soft); }
+.stack li { margin-bottom: 3px; }
+
+footer {
+  border-top: 1px solid var(--rule); margin-top: 60px; padding-top: 20px;
+  font-size: 13px; color: var(--ink-faint);
+}
+
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* --- Impresión / PDF ------------------------------------------------------
+   Un CV se imprime. Fondo claro siempre, una columna, y nada partido por la
+   mitad entre dos hojas. */
+@media print {
+  @page { size: A4; margin: 15mm 14mm; }
+  :root:not([data-theme="light"]), :root[data-theme="dark"] {
+    --paper: #FFFFFF; --surface: #F3F1EC; --ink: #17212B; --ink-soft: #46525E;
+    --ink-faint: #6E7982; --rule: rgba(23,33,43,0.16); --rule-hard: rgba(23,33,43,0.34);
+    --accent: #A8481B; --accent-dim: #C9702F; --ok: #2C6249;
+  }
+  body { font-size: 10.2pt; line-height: 1.5; }
+  .page { max-width: none; padding: 0; }
+  h1 { font-size: 27pt; }
+  h2 { font-size: 15pt; }
+  section { margin-top: 26px; }
+  .sec-head, .sec-body { grid-template-columns: 46px minmax(0, 1fr); gap: 14px; }
+  .note, .product, .steps > li, tr, .fig, .stack > div { break-inside: avoid; }
+  h2, h3, .sec-head, .eyebrow { break-after: avoid; }
+  section, .products, table { break-inside: auto; }
+  table { min-width: 0; }
+  a { color: inherit; text-decoration: none; }
+  footer { margin-top: 30px; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="masthead">
+    <p class="eyebrow">Portafolio técnico · Infraestructura y entrega</p>
+    <h1>Tres productos en Google&nbsp;Cloud, de la rama al tráfico</h1>
+    <p class="lede">Diseño y operación de la infraestructura de tres APIs en producción sobre
+    Cloud&nbsp;Run: contenedores que se verifican antes de publicarse, despliegue automático por
+    repositorio, migraciones deliberadamente fuera del pipeline, y un entorno de preproducción
+    levantado desde cero en un proyecto aparte.</p>
+    <div class="byline">
+      <span><b>Desarrollo backend e infraestructura</b></span>
+      <span>RUSHINGWIND</span>
+      <span>2026</span>
+    </div>
+  </header>
+
+  <div class="figures">
+    <div class="fig"><span class="n">3</span><span class="l">servicios en Cloud&nbsp;Run, en producción</span></div>
+    <div class="fig"><span class="n">4</span><span class="l">triggers de Cloud&nbsp;Build (despliegue y verificación de PR)</span></div>
+    <div class="fig"><span class="n">3</span><span class="l">instancias de Cloud&nbsp;SQL · PostgreSQL&nbsp;17</span></div>
+    <div class="fig"><span class="n">2</span><span class="l">proyectos de GCP: producción y staging</span></div>
+    <div class="fig"><span class="n">1</span><span class="l">Cloud&nbsp;Run Job y 1 Cloud&nbsp;Scheduler</span></div>
+  </div>
+
+  <!-- ==================================================================== -->
+  <section>
+    <div class="sec-head">
+      <span class="num">01</span>
+      <div>
+        <h2>Los productos</h2>
+        <p class="sub">Tres bases de código independientes, un solo proyecto de GCP y una sola
+        forma de desplegar. Comparten registro de imágenes, cuenta de servicio y región; no
+        comparten datos: cada una con su instancia, sus roles y sus secretos.</p>
+      </div>
+    </div>
+    <div class="sec-body">
+      <div class="products">
+        <div class="product">
+          <h3>API de contenido</h3>
+          <span class="tag">MONOREPO · NestJS + Prisma</span>
+          <p>El producto grande: API, aplicación móvil, app de televisión y web, en un monorepo
+          con paquetes compartidos.</p>
+          <ul>
+            <li>Cloud Run + Cloud SQL dedicado</li>
+            <li><strong>Cloud Run Job</strong> para migraciones</li>
+            <li>Cloud Scheduler para envíos diarios</li>
+            <li>Firebase: identidad, almacenamiento, notificaciones y hosting</li>
+          </ul>
+        </div>
+        <div class="product">
+          <h3>Monedero de eventos</h3>
+          <span class="tag">REPO PROPIO · NestJS + Prisma</span>
+          <p>Cobros con pulsera NFC en eventos. Dinero real, así que el pipeline es el más
+          estricto de los tres.</p>
+          <ul>
+            <li>Cloud Run + Cloud SQL propio</li>
+            <li>Imagen multietapa con etapa de verificación</li>
+            <li>Un secreto por rol de base de datos</li>
+            <li>Migraciones a mano, por decisión</li>
+          </ul>
+        </div>
+        <div class="product">
+          <h3>Plataforma de formación</h3>
+          <span class="tag">MONOREPO · API + web</span>
+          <p>API en Cloud Run y una web estática que se publica en el mismo pipeline, después
+          de la API.</p>
+          <ul>
+            <li>Cloud Run + Cloud SQL propio</li>
+            <li>Arranque real del contenedor como paso de CI</li>
+            <li>Firebase Hosting con <em>targets</em></li>
+            <li>Orden forzado: la web nunca llama a una API vieja</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================================================================== -->
+  <section>
+    <div class="sec-head">
+      <span class="num">02</span>
+      <div>
+        <h2>El pipeline, paso a paso</h2>
+        <p class="sub">Un archivo por repositorio y un trigger que lo dispara en cada push a la
+        rama principal. Los pasos están ordenados de modo que <strong>nada se publica sin haber
+        sido verificado</strong>, y el fallo aparece en su propio paso en vez de disfrazado de
+        error de compilación.</p>
+      </div>
+    </div>
+    <div class="sec-body">
+      <ol class="steps">
+        <li class="key">
+          <span class="n"></span>
+          <div>
+            <h3>Verificar, dentro de la imagen</h3>
+            <p>Una etapa del Dockerfile que solo existe para esto: comprobación de tipos, la
+            batería de pruebas unitarias y un chequeo de que la referencia OpenAPI publicada
+            coincide con el código. Se construye con <code>--target</code>, aparte de la imagen
+            final. Si algo falla, el build muere antes de publicar nada.</p>
+          </div>
+        </li>
+        <li>
+          <span class="n"></span>
+          <div>
+            <h3>Construir</h3>
+            <p>Imagen multietapa: instalar, compilar, verificar, <em>podar</em> las dependencias
+            de desarrollo y copiar a una imagen final mínima, sin privilegios y con usuario
+            propio. De cientos de megas a unas decenas — y lo que no viaja no se puede explotar.</p>
+          </div>
+        </li>
+        <li>
+          <span class="n"></span>
+          <div>
+            <h3>Arrancar el contenedor de verdad</h3>
+            <p>En uno de los proyectos hay un paso que levanta la imagen recién construida y le
+            pide la ruta de salud. Un contenedor que compila pero no arranca es un fallo que de
+            otro modo se descubre en producción, en el despliegue.</p>
+          </div>
+        </li>
+        <li>
+          <span class="n"></span>
+          <div>
+            <h3>Publicar en Artifact Registry</h3>
+            <p>Dos etiquetas por imagen: el hash corto del commit y <code>latest</code>. El
+            despliegue referencia <strong>el hash</strong>, nunca <code>latest</code>: así se
+            sabe exactamente qué revisión está sirviendo y se puede volver atrás señalando una
+            imagen concreta.</p>
+          </div>
+        </li>
+        <li class="key">
+          <span class="n"></span>
+          <div>
+            <h3>Desplegar en Cloud Run</h3>
+            <p>Conexión al Cloud SQL por socket, variables de entorno no sensibles en el propio
+            comando y las sensibles montadas desde Secret Manager. La revisión nueva solo recibe
+            tráfico si arranca y responde; si no, el build falla y el tráfico se queda donde
+            estaba.</p>
+          </div>
+        </li>
+      </ol>
+
+      <div class="note">
+        <p class="eyebrow">Y un segundo trigger por repositorio</p>
+        <p>Cada repo tiene también un trigger de <strong>pull request</strong> con un archivo
+        distinto: construye y verifica, pero no publica ni despliega. Es el mismo trabajo sin la
+        parte irreversible, y es lo que hace que la rama principal llegue al despliegue ya
+        revisada.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================================================================== -->
+  <section>
+    <div class="sec-head">
+      <span class="num">03</span>
+      <div>
+        <h2>Las migraciones no van en el pipeline</h2>
+        <p class="sub">Es la decisión de infraestructura con más consecuencias de todo el
+        conjunto, y conviene explicar por qué.</p>
+      </div>
+    </div>
+    <div class="sec-body">
+      <p>Lo natural es añadir un paso de migración al despliegue. No se hizo, y el motivo es
+      Cloud Run: <strong>el paso de arranque corre en cada instancia</strong>. Con escalado
+      automático, varias instancias levantando a la vez aplicarían las mismas migraciones en
+      paralelo sobre la misma base. En un sistema que mueve dinero, eso no es un riesgo
+      aceptable.</p>
+      <p>La migración vive fuera, y de dos maneras según el producto: un <strong>Cloud Run
+      Job</strong> dedicado que se ejecuta una vez por versión, y en el otro un guion que abre
+      un proxy autenticado contra Cloud SQL y aplica lo pendiente con un usuario distinto al de
+      la aplicación.</p>
+
+      <p>Sacarlas del pipeline crea una asimetría —el código se despliega solo, el esquema no— y
+      esa asimetría obliga a una regla de orden. Romperla deja una ventana con la API pidiendo
+      algo que todavía no existe:</p>
+
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Tipo de cambio</th><th>Orden</th><th>Por qué</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>Aditivo<br><small>columna o tabla nueva</small></td>
+              <td class="mono">migrar → desplegar</td>
+              <td>El código nuevo pide la columna en cada consulta; el viejo la ignora sin enterarse.</td>
+            </tr>
+            <tr>
+              <td>Destructivo<br><small>borrar o renombrar</small></td>
+              <td class="mono">desplegar → migrar</td>
+              <td>Al revés: el código viejo seguiría pidiendo lo que la migración acaba de quitar.</td>
+            </tr>
+            <tr>
+              <td>Restricción nueva<br><small>índice único, validación</small></td>
+              <td class="mono">desplegar → migrar</td>
+              <td>No añade nada que pedir: añade algo que la base puede <em>negar</em>. Al revés, un duplicado devuelve «error interno» a quien lo teclea en vez del conflicto que el código nuevo sabe traducir.</td>
+            </tr>
+            <tr>
+              <td>Cambio de tipo o de valor<br><small>con datos dentro</small></td>
+              <td class="mono">los dos seguidos</td>
+              <td>Hay ventana en cualquiera de los dos órdenes. Se minimiza, se avisa, y no se hace con un evento en marcha.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>Renombrar una columna en producción, por tanto, son <strong>dos despliegues</strong>:
+      añadir la nueva escribiendo en ambas, migrar los datos, y quitar la vieja después. Las
+      migraciones no se revierten, así que esa disciplina es lo único que hace seguro revertir
+      el código.</p>
+    </div>
+  </section>
+
+  <!-- ==================================================================== -->
+  <section>
+    <div class="sec-head">
+      <span class="num">04</span>
+      <div>
+        <h2>Secretos, identidad y permisos</h2>
+      </div>
+    </div>
+    <div class="sec-body">
+      <p>Ninguna credencial vive en el repositorio ni en la imagen. Cada valor sensible es un
+      secreto de <strong>Secret Manager</strong> montado por Cloud Run en el arranque, y hay
+      <strong>un secreto por rol de base de datos</strong>: el que usa la aplicación no es el
+      que migra, y el que migra no es el propietario del esquema.</p>
+      <p>Los permisos de la base se aplican aparte del esquema y se vuelven a aplicar después de
+      cada migración. Al rol de la aplicación se le <strong>revocan</strong> explícitamente el
+      borrado y la modificación sobre la tabla del libro contable: es de solo inserción por
+      permisos, no por disciplina de quien escribe el código.</p>
+      <p>La firma de las sesiones se comparte entre dos de las APIs, porque una emite los tokens
+      y la otra solo los verifica. Está documentado como deuda consciente —lo correcto sería un
+      algoritmo asimétrico, con la clave pública del lado que verifica— y el módulo que lo hace
+      está aislado para que ese cambio sea local.</p>
+
+      <div class="note">
+        <p class="eyebrow">Lo que no es evidente</p>
+        <p><code>roles/editor</code> <strong>no</strong> da acceso al contenido de los secretos.
+        Cada secreto necesita su enlace explícito de <em>accessor</em> para la cuenta de
+        servicio. Sin él, el servicio despliega y muere al arrancar, con un error que no menciona
+        permisos por ningún lado.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================================================================== -->
+  <section>
+    <div class="sec-head">
+      <span class="num">05</span>
+      <div>
+        <h2>Observabilidad</h2>
+        <p class="sub">Un log que no se puede filtrar es un log que no se lee.</p>
+      </div>
+    </div>
+    <div class="sec-body">
+      <p>Las tres APIs escribían texto plano, y en Cloud Logging eso significa que
+      <strong>todo llega con severidad informativa, los errores incluidos</strong>: no hay campo
+      por el que filtrar ni nada sobre lo que alertar. Se sustituyó por registro estructurado en
+      JSON con los nombres que la plataforma trata como suyos —severidad, mensaje, marca de
+      tiempo— de modo que la consola clasifica, filtra y alerta sin trabajo adicional.</p>
+      <p>Lo que más valor dio no fue el formato sino la <strong>correlación</strong>: cada
+      petición lleva un identificador que se reutiliza del propio encabezado de traza de la
+      plataforma cuando existe, viaja de vuelta en la respuesta y se adjunta a
+      <em>todas</em> las líneas de esa petición, incluidas las que escribe la lógica de negocio.
+      El resultado práctico: el identificador que reporta un cliente y la traza de la consola son
+      el mismo hilo, y un rechazo de autenticación y el código de estado que lo acompaña dejan de
+      ser dos líneas sueltas.</p>
+      <p>Dos detalles que se decidieron a conciencia: la sonda de salud <strong>no</strong> se
+      registra —golpea cada pocos segundos y no dice nada— pero una sonda que falla sí; y los
+      encabezados de la petición no se escriben nunca, porque el serializador por omisión de la
+      librería incluye el de autorización, y un registro con eso dentro es una sesión regalada a
+      quien lea la consola.</p>
+    </div>
+  </section>
+
+  <!-- ==================================================================== -->
+  <section>
+    <div class="sec-head">
+      <span class="num">06</span>
+      <div>
+        <h2>Un entorno de staging desde cero</h2>
+        <p class="sub">Proyecto de GCP aparte, no un sufijo en los nombres del de producción.</p>
+      </div>
+    </div>
+    <div class="sec-body">
+      <p>La razón de que sea un proyecto separado y no otro servicio dentro del mismo es el
+      radio de daño: con proyectos distintos, una prueba no puede tocar la base, el bucket ni
+      los secretos de producción <em>por accidente</em>, porque no tiene permiso para verlos.</p>
+      <p>Se levantó completo y documentado por fases, de forma que otra persona pueda repetirlo:
+      proyecto y facturación, cuenta de servicio con lo justo, base de datos y copia de los
+      datos, secretos propios generados en el momento, bucket de medios, el servicio y su job de
+      migración, el planificador, y por último las aplicaciones apuntadas con un perfil de
+      compilación distinto.</p>
+      <p>El documento incluye también lo que <strong>no</strong> cubre —las tiendas de
+      aplicaciones, las páginas legales, los servicios de los otros equipos— y el costo mensual
+      estimado, con la alternativa más barata de tamaño de base de datos. Un entorno de pruebas
+      cuyo costo nadie conoce es un entorno que alguien apaga.</p>
+    </div>
+  </section>
+
+  <!-- ==================================================================== -->
+  <section>
+    <div class="sec-head">
+      <span class="num">07</span>
+      <div>
+        <h2>Lo que costó un fallo real</h2>
+        <p class="sub">Cada línea corresponde a algo que se rompió una vez y dejó de romperse
+        porque quedó escrito. Es la parte del trabajo que no se ve en un diagrama.</p>
+      </div>
+    </div>
+    <div class="sec-body">
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Síntoma</th><th>Causa</th><th>Lo que quedó</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>El trigger no se crea y la respuesta no dice qué falta</td>
+              <td>Los triggers de segunda generación exigen indicar la cuenta de servicio de forma explícita</td>
+              <td>Documentado junto al comando de creación</td>
+            </tr>
+            <tr>
+              <td>El proxy contra la base muere al arrancar y el cliente falla contra un puerto vacío</td>
+              <td>El proxy usa credenciales de aplicación, que son otro archivo y otro comando distintos a los de la sesión normal</td>
+              <td>Anotado como primer paso del guion de migración</td>
+            </tr>
+            <tr>
+              <td>La revisión no levanta y el tráfico se queda en la anterior</td>
+              <td>El secreto se creó con la salida de un gestor de paquetes, que escribe su propia cabecera por la salida estándar: 192 bytes en vez de 45</td>
+              <td>Comprobar la longitud antes de subirlo — sin mostrar el valor</td>
+            </tr>
+            <tr>
+              <td>El build falla con «la ruta no existe», y en local funciona siempre</td>
+              <td>Un guion que corre dentro de la imagen ve un <em>subconjunto</em> del repositorio: solo lo que esa etapa copia</td>
+              <td>Al tocar un guion del pipeline, revisar qué copia su etapa</td>
+            </tr>
+            <tr>
+              <td>El build dice «código de salida 1» y nada más</td>
+              <td>Salir del proceso de inmediato trunca la salida cuando no hay terminal; y un arranque con el registro apagado muere sin imprimir el motivo</td>
+              <td>Código de salida por asignación, y nunca apagar el registro en un guion</td>
+            </tr>
+            <tr>
+              <td>La API entera responde error interno al leer saldos</td>
+              <td>Recrear una vista le quita sus permisos, y los permisos por omisión no cubren objetos recreados</td>
+              <td>Reaplicar los permisos después de tocar cualquier vista</td>
+            </tr>
+            <tr>
+              <td>El servicio arranca y muere al primer uso de la base</td>
+              <td>El cliente de la base es dependencia de <em>producción</em>, no de desarrollo: la poda se lo llevaba por delante</td>
+              <td>Regenerar el cliente después de podar, en esa etapa</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================================================================== -->
+  <section>
+    <div class="sec-head">
+      <span class="num">08</span>
+      <div>
+        <h2>Verificación antes de tocar producción</h2>
+      </div>
+    </div>
+    <div class="sec-body">
+      <p>Ningún cambio de esquema sale del repositorio sin que se haya creado una base
+      <strong>desde cero</strong> aplicando todas las migraciones en orden, otra desde el archivo
+      original de referencia, y comparado restricciones, índices y columnas entre las dos. Esa
+      comparación es barata y ha encontrado cosas que ninguna prueba veía: restricciones que
+      comparaban mal y habrían hecho imposible una operación normal del negocio, y una regla de
+      integridad copiada con la columna equivocada.</p>
+      <p>Encima de eso, cada despliegue va precedido de comprobación de tipos, pruebas
+      unitarias, pruebas de integración contra una base real —incluidas las de concurrencia,
+      que disparan peticiones en paralelo y exigen que solo una gane— y un recorrido de humo que
+      ejercita la API de punta a punta y hoy suma 350 comprobaciones.</p>
+    </div>
+  </section>
+
+  <!-- ==================================================================== -->
+  <section>
+    <div class="sec-head">
+      <span class="num">09</span>
+      <div>
+        <h2>Tecnologías</h2>
+      </div>
+    </div>
+    <div class="sec-body">
+      <div class="stack">
+        <div>
+          <h3>Google Cloud</h3>
+          <ul>
+            <li>Cloud Run (servicios y jobs)</li>
+            <li>Cloud Build y triggers</li>
+            <li>Artifact Registry</li>
+            <li>Cloud SQL · PostgreSQL 17</li>
+            <li>Secret Manager</li>
+            <li>Cloud Scheduler</li>
+            <li>Cloud Logging y Cloud Trace</li>
+            <li>IAM y cuentas de servicio</li>
+          </ul>
+        </div>
+        <div>
+          <h3>Firebase</h3>
+          <ul>
+            <li>Authentication</li>
+            <li>Cloud Storage y sus reglas</li>
+            <li>Cloud Messaging</li>
+            <li>Hosting con <em>targets</em></li>
+          </ul>
+        </div>
+        <div>
+          <h3>Plataforma</h3>
+          <ul>
+            <li>Docker multietapa</li>
+            <li>Node.js 22 · TypeScript</li>
+            <li>NestJS · Prisma</li>
+            <li>pnpm y monorepos</li>
+            <li>Jest: unitarias, integración y concurrencia</li>
+            <li>OpenAPI generado y verificado</li>
+          </ul>
+        </div>
+        <div>
+          <h3>Prácticas</h3>
+          <ul>
+            <li>Migraciones SQL escritas a mano</li>
+            <li>Orden de despliegue por tipo de cambio</li>
+            <li>Registro estructurado y correlación de trazas</li>
+            <li>Verificación de PR sin publicar</li>
+            <li>Documentación de decisiones, no de comandos</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <p>Documento de portafolio. Describe arquitectura y decisiones de trabajo realizado en
+    RUSHINGWIND durante 2026; se omiten a propósito identificadores de infraestructura
+    —proyectos, cuentas de servicio, instancias, nombres de secretos y direcciones de
+    servicio—, que no aportan al relato y no deben publicarse.</p>
+  </footer>
+
+</div>
+</body>
+</html>
